@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ejercicios</title>
+</head>
+<body>
+  <textarea id="usernameInput" rows="1" cols="20" placeholder="Enter username"></textarea>
+  <button onclick="openWebcam()">Transferencia Virtual de Objetos</button>
+  <div id="loading">
+    <div class="loader">
+      <div class="circle"></div>
+    </div>
+  </div>
+  <video id="video" autoplay muted></video>
+  <script>
+    function openWebcam() {
+      var username = document.getElementById("usernameInput").value;
+      var xhttp = new XMLHttpRequest();
+      xhttp.open("GET", "http://127.0.0.1:8900/run_transferencia?username=" + encodeURIComponent(username), true);
+
+      // Add a while loop to check the readyState property
+      while (xhttp.readyState != 4) {
+        // Do something while the request is being processed
+        document.getElementById("loading").classList.add("active");
+      }
+
+      // When the request is finished, do something else
+      document.getElementById("loading").classList.remove("active");
+      document.getElementById("video").src = xhttp.responseURL;
+    }
+  </script>
+  <style>
+    body {
+      background-color: #ffffff;
+    }
+
+    .loader {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background-color: #000000;
+      position: relative;
+      margin: 0 auto;
+    }
+
+    .circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background-color: #ffffff;
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      animation: rotate 1.5s linear infinite;
+    }
+
+    @keyframes rotate {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</body>
+</html>
