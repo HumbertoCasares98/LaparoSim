@@ -1,23 +1,36 @@
-import cv2, time, threading, csv, datetime, sys
+import cv2, time, threading, csv, datetime, sys, os
 import matplotlib.pyplot as plt
 import numpy as np
 from matriz_conversion import conversion_2p
-#from funciones import *
+from database import Database
+from InferenceOps.inference import inference_maps
 
 # Access the argument
-argument = sys.argv[1]  # The first argument is at index 1
+# argument = sys.argv[1]  # The first argument is at index 1
+# userKey = sys.argv[2]
+# userType = sys.argv[3]
 
-global finish
-global file_name
+# User Name
+argument = "Emmanuel_testing"
+
+try:
+    # Instantiate the Database connection object
+    obj = Database()
+    print("Database connection object created successfully.")
+except Exception as e:
+    print("Error occurred while creating the Database connection object:", str(e))
 
 # Initialize video capture for User Camera
-capUser = cv2.VideoCapture(2)
+capUser = cv2.VideoCapture(1)
 # Initialize 2 tracking cameras, cap1 (x,y) axis, cap2 (z) axis
-cap1 = cv2.VideoCapture(1)
-cap2 = cv2.VideoCapture(0)
+cap1 = cv2.VideoCapture(0)
+cap2 = cv2.VideoCapture(2)
 
 # Initialize video capture for User Camera, cap1 (x,y) axis, and cap2 (z) axis
 cameras = {'User_Camera': capUser, 'XY_Cam': cap1, 'Z_Cam': cap2}
+
+global finish
+global file_name
 
 # Check if each camera has been successfully opened and is capturing video
 for cam_name, cam in cameras.items():
@@ -36,7 +49,7 @@ def detect_color(frame, lower_color, upper_color, color_bgr):
     mask = cv2.inRange(hsv, lower_color, upper_color)
     # Apply a series of dilations and erosions to eliminate any small blobs left in the mask
     mask = cv2.erode(mask, None, iterations=2)
-    mask = cv2.dilate(mask, None, iterations=2)
+    mask = cv2.dilate(mask, None, iterations=4)
     # Find contours and centroid in the binary image
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     frame=center_object(frame, contours) # Centroid
@@ -95,7 +108,23 @@ def gen_graph():
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    plt.show()
+
+    # Save the graph as an image
+    base_name = os.path.splitext(os.path.basename(file_name))[0]
+    img_path = os.path.join("Graph3D/", base_name + ".png")
+    fig.savefig(img_path)
+    plt.show() # Popup image to user
+    plt.close(fig)  # Close the figure to free up memory
+
+    # Cloud operations
+    # file_directory = os.getcwd().replace("\\", "/")+"/"+file_name
+    # graph_directory = os.getcwd().replace("\\", "/")+"/"+img_path
+    # obj.upload_files_to_endpoint('http://143.110.148.122:8999', file_directory, graph_directory, "1", userType)
+    # _ = obj.addDataBase(file_name, userKey, argument, "1")
+
+    # Local Classification
+    file_directory = os.getcwd().replace("\\", "/") + "/" + file_name
+    user_class = inference_maps(csv_file_path=file_directory, exercise="1")
 
 def brillo(img):
     # Aplicar brillo para reflejar blancos
@@ -144,7 +173,7 @@ def XYZ_Webcam():
 
         # Check for coordinates and time to exit thread
         #if cv2.waitKey(1) & 0xFF == ord('q'):
-        if elapsed_time>=20 and val_coords(cx2B,cy2B, 220, 325) and val_coords(cx2R, cy2R, 360, 325):
+        if elapsed_time>=20 and val_coords(cx2B,cy2B, 220, 325) and val_coords(cx2R, cy2R, 365, 325):
             finish=False
             break
 
@@ -153,19 +182,17 @@ def main():
     finish=True
     # Initialize flag and time for camera 2
     process_cam2 = True
+    show_animation = False
+    centrar=False
+    animation_start_time = 0
+    animation_duration = 3
     prev_time = time.time()
 
     # Loop to read frames from both cameras
     while finish:
         # Read frame from camera 1
         ret1, frame1 = capUser.read()
-
-        # Check if frame was read successfully
-        if ret1:
-            frame1 = cv2.resize(frame1, (1000,800))
-            # Show frame from camera 1
-            cv2.imshow(str(argument), frame1)
-        
+     
         # Read frame every second from camera 2 only if process_cam2 is True
         if process_cam2 and time.time()-prev_time>=1:
             ret2, frame2 = cap2.read()
@@ -176,28 +203,57 @@ def main():
                 frame2, cx2B, cy2B = detect_color(frame2, (100, 50, 50), (130, 255, 255), (255, 0, 0))
                 frame2, cx2R, cy2R = detect_color(frame2, (0, 50, 50), (10, 255, 255), (0, 0, 255))
 
-                if val_coords(cx2B,cy2B, 220, 325) and val_coords(cx2R, cy2R, 360, 325):
+                if val_coords(cx2B,cy2B, 220, 325) and val_coords(cx2R, cy2R, 365, 325):
                     # Start the run_with_loading_bar function in a separate thread
                     process_cam2 = not process_cam2
-                    # Start the XYZ_Webcam function after 3 seconds
-                    timer = threading.Timer(3, XYZ_Webcam)
-                    timer.start()
+                    show_animation = True
+                    animation_start_time = time.time()
 
+            
             # update the previous time for camera 2
             prev_time = time.time()
 
+        # Check if animation should be shown
+        if show_animation:
+            current_time = time.time()
+            elapsed_time = current_time - animation_start_time
+
+            # Show animation for animation_duration seconds
+            if elapsed_time < animation_duration:
+                # Add "START" text in the center of the frame
+                text = "COMIENZA"
+                text_size, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 2, 4)
+                text_x = (frame1.shape[1] - text_size[0]) // 2
+                text_y = (frame1.shape[0] + text_size[1]) // 2
+                # Draw the text on the frame
+                cv2.putText(frame1, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 5)
+            else:
+                show_animation = False
+                # Start the XYZ_Webcam function 
+                t1 = threading.Thread(target=XYZ_Webcam)
+                t1.start()
+                
         # Check for key press 'q' to exit program
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+        
+        # Check if frame was read successfully
+        if ret1:
+            frame1 = cv2.resize(frame1, (1000,800))
+            #cv2.namedWindow(str("Transferencia "+argument), cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_EXPANDED)
+            #cv2.setWindowProperty(str("Transferencia "+argument), cv2.WND_PROP_TOPMOST, 1)
+                # Move the window to the center position
+            #cv2.moveWindow(str("Transferencia "+argument), frame_x, frame_y)
+
+            # Show frame from camera 1
+            cv2.imshow(str("Transferencia "+argument), frame1)
 
     # Release video captures and destroy windows
     cap1.release()
     cap2.release()
     capUser.release()
     cv2.destroyAllWindows()
-    
     gen_graph()
-
 
 if __name__ == "__main__":
     main()
